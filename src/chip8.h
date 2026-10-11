@@ -39,7 +39,7 @@ public:
     bool soundOn() const { return soundTimer > 0; }
 
 private:
-    std::array<uint8_t, 4096> memory{};
+    std::array<uint8_t, 65536> memory{};  // 64 KB (XO-CHIP); classic programs only use the first 4 KB
     std::array<uint8_t, 16> V{};          // registers V0..VF
     uint16_t I = 0;                       // index register
     uint16_t pc = 0x200;                  // program counter
@@ -63,5 +63,7 @@ private:
     void opF(uint16_t op);
     void draw(uint8_t x, uint8_t y, uint8_t height);
     bool flipPixel(int x, int y, int scale);
+    uint8_t& mem(uint32_t addr) { return memory[addr & 0xFFFF]; }  // wraps instead of crashing
+    void skip();
     void unknown(uint16_t op);
 };

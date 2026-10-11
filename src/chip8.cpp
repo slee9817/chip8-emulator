@@ -69,7 +69,7 @@ void Chip8::step() {
         if (exited) return;   // program ended with 00FD: do nothing
 
         // FETCH: two bytes, big-endian
-    uint16_t op = (memory[pc] << 8) | memory[pc + 1];
+        uint16_t op = (mem(pc) << 8) | mem(pc + 1);
     pc += 2;
 
     // DECODE: pull out the common fields once
@@ -93,15 +93,15 @@ void Chip8::step() {
         break;
 
     case 0x3:  // 3XNN: skip next instruction if VX == NN
-        if (V[x] == nn) pc += 2;
+        if (V[x] == nn) skip();
         break;
 
     case 0x4:  // 4XNN: skip next instruction if VX != NN
-        if (V[x] != nn) pc += 2;
+        if (V[x] != nn) skip();
         break;
 
     case 0x5:  // 5XY0: skip next instruction if VX == VY
-        if (V[x] == V[y]) pc += 2;
+        if (V[x] == V[y]) skip();
         break;
 
     case 0x6:  // 6XNN: VX = NN
@@ -115,7 +115,7 @@ void Chip8::step() {
     case 0x8: op8(op); break;
 
     case 0x9:  // 9XY0: skip next instruction if VX != VY
-        if (V[x] != V[y]) pc += 2;
+        if (V[x] != V[y]) skip();
         break;
 
     case 0xA:  // ANNN: I = NNN
@@ -249,10 +249,10 @@ void Chip8::opE(uint16_t op) {
     switch (op & 0x00FF) {
         
     case 0x9E:  // EX9E: skip if key VX is pressed
-        if (keys[V[x] & 0x0F]) pc += 2;
+        if (keys[V[x] & 0x0F]) skip();
         break;
     case 0xA1:  // EXA1: skip if key VX is NOT pressed
-        if (!keys[V[x] & 0x0F]) pc += 2;
+        if (!keys[V[x] & 0x0F]) skip();
         break;
     default:
         unknown(op);
@@ -262,22 +262,31 @@ void Chip8::opE(uint16_t op) {
 void Chip8::opF(uint16_t op) {
     uint8_t x = (op >> 8) & 0x0F;
     switch (op & 0x00FF) {
+    case 0x00:  // F000 NNNN (XO-CHIP): I = the 16-bit address in the next 2 bytes
+        if (x == 0) {
+            I = (mem(pc) << 8) | mem(pc + 1);
+            pc += 2;
+        }
+        else {
+            unknown(op);
+        }
+        break;
     case 0x1E:  // FX1E: I += VX
         I += V[x];
         break;
     case 0x33: {  // FX33: store BCD of VX at I, I+1, I+2
         uint8_t value = V[x];
-        memory[I] = value / 100;         // hundreds
-        memory[I + 1] = (value / 10) % 10;   // tens
-        memory[I + 2] = value % 10;          // ones
+        mem(I) = value / 100;         // hundreds
+        mem(I + 1) = (value / 10) % 10;   // tens
+        mem(I + 2) = value % 10;          // ones
         break;
     }
     case 0x55:  // FX55: store V0..VX into memory starting at I
-        for (int i = 0; i <= x; ++i) memory[I + i] = V[i];
+        for (int i = 0; i <= x; ++i) mem(I + i) = V[i];
         if (quirks.loadStoreIncrementsI) I += x + 1;
         break;
     case 0x65:  // FX65: load V0..VX from memory starting at I
-        for (int i = 0; i <= x; ++i) V[i] = memory[I + i];
+        for (int i = 0; i <= x; ++i) V[i] = mem(I + i);
         if (quirks.loadStoreIncrementsI) I += x + 1;
         break;
     case 0x07:  // FX07: VX = delay timer
@@ -350,8 +359,8 @@ void Chip8::draw(uint8_t xPos, uint8_t yPos, uint8_t height) {
 
         // Each row as 16 bits, left-aligned: big sprites use 2 bytes,
         // normal sprites put their 1 byte in the top half.
-        uint16_t bits = big ? (memory[I + row * 2] << 8) | memory[I + row * 2 + 1]
-            : (memory[I + row] << 8);
+        uint16_t bits = big ? (mem(I + row * 2) << 8) | mem(I + row * 2 + 1)
+            : (mem(I + row) << 8);
 
         for (int col = 0; col < cols; ++col) {
             int px = startX + col;
@@ -373,6 +382,12 @@ bool Chip8::flipPixel(int x, int y, int scale) {
         for (int dx = 0; dx < scale; ++dx)
             display[(y * scale + dy) * kWidth + (x * scale + dx)] ^= 1;
     return wasOn;
+}
+
+// Skip the next instruction. XO-CHIP's F000 NNNN is 4 bytes long, so skip all of it.
+void Chip8::skip() {
+    uint16_t next = (mem(pc) << 8) | mem(pc + 1);
+    pc += (next == 0xF000) ? 4 : 2;
 }
 
 // SUPER-CHIP scrolling. Each shifts the whole display and blanks the gap.
