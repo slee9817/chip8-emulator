@@ -9,7 +9,7 @@
 #include<string>
 #include<array>
 
-static constexpr int kScale = 12;              // window = 768 x 384
+static constexpr int kScale = 6;              // window = 768 x 384
 static constexpr int kInstructionsPerSecond = 700;
 static constexpr int kTimerHz = 60;
 

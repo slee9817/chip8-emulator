@@ -274,30 +274,54 @@ void Chip8::opF(uint16_t op) {
     }
 }
 
+
 // DXYN: draw an N-byte sprite from memory[I] at (VX, VY).
+// DXY0 (SUPER-CHIP): draw a 16x16 sprite, 2 bytes per row.
 // Sprites are XORed onto the screen. VF = 1 if any lit pixel gets turned off.
 void Chip8::draw(uint8_t xPos, uint8_t yPos, uint8_t height) {
-    uint8_t startX = xPos % kWidth;   // starting position wraps...
-    uint8_t startY = yPos % kHeight;
+    // In low-res mode the game sees a 64x32 screen, and each of its pixels
+    // covers a 2x2 block of our 128x64 display.
+    const int scale = hires ? 1 : 2;
+    const int w = kWidth / scale;
+    const int h = kHeight / scale;
+
+    const bool big = (height == 0);
+    const int rows = big ? 16 : height;
+    const int cols = big ? 16 : 8;
+
+    int startX = xPos % w;   // starting position wraps...
+    int startY = yPos % h;
     V[0xF] = 0;
 
-    for (int row = 0; row < height; ++row) {
+    for (int row = 0; row < rows; ++row) {
         int py = startY + row;
-        if (py >= kHeight) break;     // ...but the sprite itself clips at the edge
+        if (py >= h) break;  // ...but the sprite itself clips at the edge
 
-        uint8_t spriteByte = memory[I + row];
-        for (int col = 0; col < 8; ++col) {
+        // Each row as 16 bits, left-aligned: big sprites use 2 bytes,
+        // normal sprites put their 1 byte in the top half.
+        uint16_t bits = big ? (memory[I + row * 2] << 8) | memory[I + row * 2 + 1]
+            : (memory[I + row] << 8);
+
+        for (int col = 0; col < cols; ++col) {
             int px = startX + col;
-            if (px >= kWidth) break;
+            if (px >= w) break;
 
-            if (spriteByte & (0x80 >> col)) {
-                uint8_t& pixel = display[py * kWidth + px];
-                if (pixel) V[0xF] = 1;
-                pixel ^= 1;
+            if (bits & (0x8000 >> col)) {
+                if (flipPixel(px, py, scale)) V[0xF] = 1;
             }
         }
     }
     drawFlag = true;
+}
+
+// Flip one logical pixel. In low-res mode it covers a 2x2 block of the display.
+// Returns true if the pixel was on before (a collision).
+bool Chip8::flipPixel(int x, int y, int scale) {
+    bool wasOn = display[(y * scale) * kWidth + (x * scale)];
+    for (int dy = 0; dy < scale; ++dy)
+        for (int dx = 0; dx < scale; ++dx)
+            display[(y * scale + dy) * kWidth + (x * scale + dx)] ^= 1;
+    return wasOn;
 }
 
 void Chip8::unknown(uint16_t op) {

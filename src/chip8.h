@@ -8,8 +8,8 @@
 // main.cpp feeds it keys, calls step(), and reads `display` to draw.
 class Chip8 {
 public:
-    static constexpr int kWidth = 64;
-    static constexpr int kHeight = 32;
+    static constexpr int kWidth = 128;
+    static constexpr int kHeight = 64;
 
     Chip8();
 
@@ -37,6 +37,7 @@ private:
     uint8_t delayTimer = 0;
     uint8_t soundTimer = 0;
     int waitingKey = -1;  // FX0A: key pressed but not yet released (-1 = none)
+    bool hires = false;                   // SUPER-CHIP: 128x64 mode (false = 64x32 low-res)
 
     static constexpr uint16_t kFontStart = 0x050;
 
@@ -45,5 +46,6 @@ private:
     void opE(uint16_t op);
     void opF(uint16_t op);
     void draw(uint8_t x, uint8_t y, uint8_t height);
+    bool flipPixel(int x, int y, int scale);
     void unknown(uint16_t op);
 };
