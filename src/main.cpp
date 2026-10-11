@@ -9,6 +9,9 @@
 #include<string>
 #include<array>
 
+#include <fstream>
+#include <sstream>
+
 static constexpr int kScale = 6;              // window = 768 x 384
 static constexpr int kInstructionsPerSecond = 700;
 static constexpr int kTimerHz = 60;
@@ -37,6 +40,38 @@ static void updateTitle(SDL_Window* window, const std::string& romPath, bool sup
         + (superMode ? "   [SUPER-CHIP mode]" : "   [CHIP-8 mode]")
         + "   F2: switch";
     SDL_SetWindowTitle(window, title.c_str());
+}
+
+// Look for "Game.txt" next to "Game.ch8" and return its text ("" if there isn't one).
+static std::string readGameNotes(const std::string& romPath) {
+    size_t dot = romPath.find_last_of('.');
+    std::string txtPath = (dot == std::string::npos ? romPath : romPath.substr(0, dot)) + ".txt";
+
+    std::ifstream file(txtPath);
+    if (!file) return "";
+    std::stringstream ss;
+    ss << file.rdbuf();      // read the whole file at once
+    return ss.str();
+}
+
+// Show the game's notes plus the keypad mapping in a pop-up window.
+static void showControls(SDL_Window* window, const std::string& romPath) {
+    std::string text = readGameNotes(romPath);
+    if (text.empty())
+        text = "No notes found for this game.\n"
+        "(Looking for a .txt file with the same name as the ROM.)";
+
+    // Game notes usually describe the CHIP-8 keypad, so show how it maps to the keyboard.
+    text += "\n\nCHIP-8 keypad -> keyboard:\n"
+        "  1 2 3 C   ->   1 2 3 4\n"
+        "  4 5 6 D   ->   Q W E R\n"
+        "  7 8 9 E   ->   A S D F\n"
+        "  A 0 B F   ->   Z X C V\n\n"
+        "F2: switch CHIP-8 / SUPER-CHIP mode";
+
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION,
+        ("Controls - " + fileName(romPath)).c_str(),
+        text.c_str(), window);
 }
 
 // Called by SDL whenever the speakers need more audio.
@@ -114,6 +149,12 @@ int main(int argc, char* argv[]) {
                 superChipMode = !superChipMode;
                 chip8.quirks = superChipMode ? Chip8::kSuperChipQuirks : Chip8::kChip8Quirks;
                 updateTitle(window, romPath, superChipMode);
+            }
+
+            // F1: show this game's notes and controls
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F1) {
+                showControls(window, romPath);
+                last = SDL_GetPerformanceCounter();   // don't "catch up" on time spent reading
             }
 
             // CHIP-8 keypad
