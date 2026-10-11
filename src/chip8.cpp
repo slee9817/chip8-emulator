@@ -39,11 +39,7 @@ static constexpr std::array<uint8_t, 100> kBigFont = {
     0x3C, 0x7E, 0xC3, 0xC3, 0x7E, 0x7E, 0xC3, 0xC3, 0x7E, 0x3C,  // 8
     0x3C, 0x7E, 0xC3, 0xC3, 0x7F, 0x3F, 0x03, 0x03, 0x3E, 0x7C,  // 9
 };
-// Quirk: original COSMAC VIP copies VY into VX before shifting.
-// Set to false for games written for later interpreters (CHIP-48 / SUPER-CHIP).
-static constexpr bool kShiftCopiesVY = true;
-// Quirk: original COSMAC VIP leaves I pointing past the last register after FX55/FX65.
-static constexpr bool kLoadStoreIncrementsI = true;
+
 
 Chip8::Chip8() {
     for (size_t i = 0; i < kFont.size(); ++i) memory[kFontStart + i] = kFont[i];
@@ -70,7 +66,9 @@ void Chip8::tickTimers() {
 }
 
 void Chip8::step() {
-    // FETCH: two bytes, big-endian
+        if (exited) return;   // program ended with 00FD: do nothing
+
+        // FETCH: two bytes, big-endian
     uint16_t op = (memory[pc] << 8) | memory[pc + 1];
     pc += 2;
 
@@ -124,8 +122,8 @@ void Chip8::step() {
         I = nnn;
         break;
 
-    case 0xB:  // BNNN: jump to NNN + V0
-        pc = nnn + V[0];
+    case 0xB:  // BNNN: jump to NNN + V0   (SUPER-CHIP quirk: XNN + VX)
+        pc = nnn + (quirks.jumpUsesVX ? V[x] : V[0]);
         break;
 
     case 0xC: { // CXNN: VX = random byte & NN
@@ -166,6 +164,10 @@ void Chip8::op0(uint16_t op) {
 
     case 0x00FC:  // SUPER-CHIP: scroll left 4 pixels
         scrollLeft(4);
+        break;
+
+    case 0x00FD:  // SUPER-CHIP: exit
+        exited = true;
         break;
 
     case 0x00FE:  // SUPER-CHIP: switch to low-res (64x32)
@@ -224,14 +226,14 @@ void Chip8::op8(uint16_t op) {
             break;
         }
         case 0x6: {  // 8XY6: VX >>= 1, VF = bit shifted out
-            if (kShiftCopiesVY) V[x] = V[y];
+            if (quirks.shiftCopiesVY) V[x] = V[y];
             uint8_t flag = V[x] & 0x01;         // lowest bit, about to fall off
             V[x] = V[x] >> 1;
             V[0xF] = flag;                      // flag goes LAST
             break;
         }
         case 0xE: {  
-            if (kShiftCopiesVY) V[x] = V[y];
+            if (quirks.shiftCopiesVY) V[x] = V[y];
             uint8_t flag = (V[x] >> 7) & 0x01;  
             V[x] = V[x] << 1;
             V[0xF] = flag;                      
@@ -272,11 +274,11 @@ void Chip8::opF(uint16_t op) {
     }
     case 0x55:  // FX55: store V0..VX into memory starting at I
         for (int i = 0; i <= x; ++i) memory[I + i] = V[i];
-        if (kLoadStoreIncrementsI) I += x + 1;
+        if (quirks.loadStoreIncrementsI) I += x + 1;
         break;
     case 0x65:  // FX65: load V0..VX from memory starting at I
         for (int i = 0; i <= x; ++i) V[i] = memory[I + i];
-        if (kLoadStoreIncrementsI) I += x + 1;
+        if (quirks.loadStoreIncrementsI) I += x + 1;
         break;
     case 0x07:  // FX07: VX = delay timer
         V[x] = delayTimer;
@@ -292,6 +294,12 @@ void Chip8::opF(uint16_t op) {
         break;
     case 0x30:  // FX30 (SUPER-CHIP): I = address of big font digit VX
         I = kBigFontStart + (V[x] % 10) * 10;
+        break;
+    case 0x75:  // FX75 (SUPER-CHIP): save V0..VX to flag storage (max 8)
+        for (int i = 0; i <= x && i < 8; ++i) rplFlags[i] = V[i];
+        break;
+    case 0x85:  // FX85 (SUPER-CHIP): load V0..VX from flag storage (max 8)
+        for (int i = 0; i <= x && i < 8; ++i) V[i] = rplFlags[i];
         break;
     case 0x0A: {  // FX0A: wait for a key press + release, store it in VX
         if (waitingKey == -1) {

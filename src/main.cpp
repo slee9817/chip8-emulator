@@ -31,6 +31,14 @@ static std::string fileName(const std::string& path) {
     return (slash == std::string::npos) ? path : path.substr(slash + 1);
 }
 
+// Window title: game name, active quirk mode, and a hint for switching.
+static void updateTitle(SDL_Window* window, const std::string& romPath, bool superMode) {
+    std::string title = "CHIP-8 - " + fileName(romPath)
+        + (superMode ? "   [SUPER-CHIP mode]" : "   [CHIP-8 mode]")
+        + "   F2: switch";
+    SDL_SetWindowTitle(window, title.c_str());
+}
+
 // Called by SDL whenever the speakers need more audio.
 // Fills the buffer with a 440 Hz square wave.
 static void audioCallback(void* userdata, Uint8* stream, int len) {
@@ -65,6 +73,8 @@ int main(int argc, char* argv[]) {
         ("CHIP-8 - " + fileName(romPath)).c_str(),
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         Chip8::kWidth * kScale, Chip8::kHeight * kScale, 0);
+    bool superChipMode = false;
+    updateTitle(window, romPath, superChipMode);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_Texture* texture = SDL_CreateTexture(
         renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
@@ -98,21 +108,32 @@ int main(int argc, char* argv[]) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = false;
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) running = false;
+
+            // F2: switch between CHIP-8 and SUPER-CHIP quirk modes
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F2) {
+                superChipMode = !superChipMode;
+                chip8.quirks = superChipMode ? Chip8::kSuperChipQuirks : Chip8::kChip8Quirks;
+                updateTitle(window, romPath, superChipMode);
+            }
+
+            // CHIP-8 keypad
             if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) {
                 auto it = kKeyMap.find(e.key.keysym.sym);
                 if (it != kKeyMap.end()) chip8.keys[it->second] = (e.type == SDL_KEYDOWN);
             }
 
-            // NEW: a .ch8 file was dropped onto the window
+            // A .ch8 file was dropped onto the window
             if (e.type == SDL_DROPFILE) {
                 std::string path = e.drop.file;
                 SDL_free(e.drop.file);           // SDL allocated this string; we must free it
 
-                Chip8 fresh;                      // brand-new machine: cleared memory, registers, screen
+                Chip8 fresh;                      // brand-new machine, in the current quirk mode
+                fresh.quirks = superChipMode ? Chip8::kSuperChipQuirks : Chip8::kChip8Quirks;
                 if (fresh.loadRom(path)) {
                     chip8 = fresh;                // replace the running game
-                    chip8.drawFlag = true;        // redraw the (now blank) screen
-                    SDL_SetWindowTitle(window, ("CHIP-8 - " + fileName(path)).c_str());
+                    chip8.drawFlag = true;
+                    romPath = path;               // remember which game is loaded
+                    updateTitle(window, romPath, superChipMode);
                 }
                 else {
                     std::fprintf(stderr, "Could not load ROM: %s\n", path.c_str());
