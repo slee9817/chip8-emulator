@@ -40,6 +40,7 @@ private:
     bool hires = false;                   // SUPER-CHIP: 128x64 mode (false = 64x32 low-res)
 
     static constexpr uint16_t kFontStart = 0x050;
+    static constexpr uint16_t kBigFontStart = 0x0A0;
 
     void op0(uint16_t op);
     void op8(uint16_t op);

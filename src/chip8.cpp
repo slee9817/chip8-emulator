@@ -25,6 +25,20 @@ static constexpr std::array<uint8_t, 80> kFont = {
     0xF0, 0x80, 0xF0, 0x80, 0xF0,  // E
     0xF0, 0x80, 0xF0, 0x80, 0x80,  // F
 };
+
+// SUPER-CHIP big font: digits 0-9, 10 bytes each, 8x10 pixels.
+static constexpr std::array<uint8_t, 100> kBigFont = {
+    0x3C, 0x7E, 0xE7, 0xC3, 0xC3, 0xC3, 0xC3, 0xE7, 0x7E, 0x3C,  // 0
+    0x18, 0x38, 0x58, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C,  // 1
+    0x3E, 0x7F, 0xC3, 0x06, 0x0C, 0x18, 0x30, 0x60, 0xFF, 0xFF,  // 2
+    0x3C, 0x7E, 0xC3, 0x03, 0x0E, 0x0E, 0x03, 0xC3, 0x7E, 0x3C,  // 3
+    0x06, 0x0E, 0x1E, 0x36, 0x66, 0xC6, 0xFF, 0xFF, 0x06, 0x06,  // 4
+    0xFF, 0xFF, 0xC0, 0xC0, 0xFC, 0xFE, 0x03, 0xC3, 0x7E, 0x3C,  // 5
+    0x3E, 0x7C, 0xC0, 0xC0, 0xFC, 0xFE, 0xC3, 0xC3, 0x7E, 0x3C,  // 6
+    0xFF, 0xFF, 0x03, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x60, 0x60,  // 7
+    0x3C, 0x7E, 0xC3, 0xC3, 0x7E, 0x7E, 0xC3, 0xC3, 0x7E, 0x3C,  // 8
+    0x3C, 0x7E, 0xC3, 0xC3, 0x7F, 0x3F, 0x03, 0x03, 0x3E, 0x7C,  // 9
+};
 // Quirk: original COSMAC VIP copies VY into VX before shifting.
 // Set to false for games written for later interpreters (CHIP-48 / SUPER-CHIP).
 static constexpr bool kShiftCopiesVY = true;
@@ -33,6 +47,7 @@ static constexpr bool kLoadStoreIncrementsI = true;
 
 Chip8::Chip8() {
     for (size_t i = 0; i < kFont.size(); ++i) memory[kFontStart + i] = kFont[i];
+    for (size_t i = 0; i < kBigFont.size(); ++i) memory[kBigFontStart + i] = kBigFont[i];
 }
 
 bool Chip8::loadRom(const std::string& path) {
@@ -138,6 +153,18 @@ void Chip8::op0(uint16_t op) {
 
         case 0x00EE:  // return from subroutine
             pc = stack[--sp];
+            break;
+
+        case 0x00FE:  // SUPER-CHIP: switch to low-res (64x32)
+            hires = false;
+            display.fill(0);
+            drawFlag = true;
+            break;
+
+        case 0x00FF:  // SUPER-CHIP: switch to hi-res (128x64)
+            hires = true;
+            display.fill(0);
+            drawFlag = true;
             break;
 
         default:      // 0NNN: machine code routine -- ignored by modern emulators
@@ -249,6 +276,9 @@ void Chip8::opF(uint16_t op) {
         break;
     case 0x29:  // FX29: I = address of font sprite for digit VX
         I = kFontStart + (V[x] & 0x0F) * 5;
+        break;
+    case 0x30:  // FX30 (SUPER-CHIP): I = address of big font digit VX
+        I = kBigFontStart + (V[x] % 10) * 10;
         break;
     case 0x0A: {  // FX0A: wait for a key press + release, store it in VX
         if (waitingKey == -1) {
