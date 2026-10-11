@@ -5,6 +5,7 @@
 #include <iterator>
 #include <vector>
 #include <random>
+#include <cstdlib>
 
 // Built-in hex font: 16 characters (0-F), 5 bytes each, 4 pixels wide.
 static constexpr std::array<uint8_t, 80> kFont = {
@@ -100,9 +101,24 @@ void Chip8::step() {
         if (V[x] != nn) skip();
         break;
 
-    case 0x5:  // 5XY0: skip next instruction if VX == VY
-        if (V[x] == V[y]) skip();
+    case 0x5: {
+        int count = std::abs(x - y) + 1;   // how many registers in the range
+        int dir = (x <= y) ? 1 : -1;       // walk upward (V3..V7) or downward (V7..V3)
+        switch (n) {
+        case 0x0:  // 5XY0: skip if VX == VY
+            if (V[x] == V[y]) skip();
+            break;
+        case 0x2:  // 5XY2 (XO-CHIP): save VX..VY to memory at I (I unchanged)
+            for (int i = 0; i < count; ++i) mem(I + i) = V[x + i * dir];
+            break;
+        case 0x3:  // 5XY3 (XO-CHIP): load VX..VY from memory at I (I unchanged)
+            for (int i = 0; i < count; ++i) V[x + i * dir] = mem(I + i);
+            break;
+        default:
+            unknown(op);
+        }
         break;
+    }
 
     case 0x6:  // 6XNN: VX = NN
         V[x] = nn;
@@ -145,6 +161,10 @@ void Chip8::step() {
 void Chip8::op0(uint16_t op) {
     if ((op & 0xFFF0) == 0x00C0) {   // 00CN (SUPER-CHIP): scroll down N pixels
         scrollDown(op & 0x000F);
+        return;
+    }
+    if ((op & 0xFFF0) == 0x00D0) {   // 00DN (XO-CHIP): scroll up N pixels
+        scrollUp(op & 0x000F);
         return;
     }
 
@@ -393,6 +413,12 @@ void Chip8::skip() {
 // SUPER-CHIP scrolling. Each shifts the whole display and blanks the gap.
 // The loop direction matters: we copy from pixels we haven't overwritten yet.
 
+void Chip8::scrollUp(int n) {
+    for (int y = 0; y < kHeight; ++y)                 // top row first
+        for (int x = 0; x < kWidth; ++x)
+            display[y * kWidth + x] = (y + n < kHeight) ? display[(y + n) * kWidth + x] : 0;
+    drawFlag = true;
+}
 void Chip8::scrollDown(int n) {
     for (int y = kHeight - 1; y >= 0; --y)            // bottom row first
         for (int x = 0; x < kWidth; ++x)

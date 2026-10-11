@@ -54,6 +54,7 @@ private:
     static constexpr uint16_t kFontStart = 0x050;
     static constexpr uint16_t kBigFontStart = 0x0A0;
 
+    void scrollUp(int n);
     void scrollDown(int n);
     void scrollRight(int n);
     void scrollLeft(int n);
