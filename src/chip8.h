@@ -39,9 +39,13 @@ private:
     int waitingKey = -1;  // FX0A: key pressed but not yet released (-1 = none)
     bool hires = false;                   // SUPER-CHIP: 128x64 mode (false = 64x32 low-res)
 
+
     static constexpr uint16_t kFontStart = 0x050;
     static constexpr uint16_t kBigFontStart = 0x0A0;
 
+    void scrollDown(int n);
+    void scrollRight(int n);
+    void scrollLeft(int n);
     void op0(uint16_t op);
     void op8(uint16_t op);
     void opE(uint16_t op);

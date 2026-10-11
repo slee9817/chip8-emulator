@@ -145,30 +145,43 @@ void Chip8::step() {
 }
 
 void Chip8::op0(uint16_t op) {
+    if ((op & 0xFFF0) == 0x00C0) {   // 00CN (SUPER-CHIP): scroll down N pixels
+        scrollDown(op & 0x000F);
+        return;
+    }
+
     switch (op) {
-        case 0x00E0:  // clear screen
-            display.fill(0);
-            drawFlag = true;
-            break;
+    case 0x00E0:  // clear screen
+        display.fill(0);
+        drawFlag = true;
+        break;
 
-        case 0x00EE:  // return from subroutine
-            pc = stack[--sp];
-            break;
+    case 0x00EE:  // return from subroutine
+        pc = stack[--sp];
+        break;
 
-        case 0x00FE:  // SUPER-CHIP: switch to low-res (64x32)
-            hires = false;
-            display.fill(0);
-            drawFlag = true;
-            break;
+    case 0x00FB:  // SUPER-CHIP: scroll right 4 pixels
+        scrollRight(4);
+        break;
 
-        case 0x00FF:  // SUPER-CHIP: switch to hi-res (128x64)
-            hires = true;
-            display.fill(0);
-            drawFlag = true;
-            break;
+    case 0x00FC:  // SUPER-CHIP: scroll left 4 pixels
+        scrollLeft(4);
+        break;
 
-        default:      // 0NNN: machine code routine -- ignored by modern emulators
-            break;
+    case 0x00FE:  // SUPER-CHIP: switch to low-res (64x32)
+        hires = false;
+        display.fill(0);
+        drawFlag = true;
+        break;
+
+    case 0x00FF:  // SUPER-CHIP: switch to hi-res (128x64)
+        hires = true;
+        display.fill(0);
+        drawFlag = true;
+        break;
+
+    default:      // 0NNN: machine code routine -- ignored by modern emulators
+        break;
     }
 }
 
@@ -352,6 +365,30 @@ bool Chip8::flipPixel(int x, int y, int scale) {
         for (int dx = 0; dx < scale; ++dx)
             display[(y * scale + dy) * kWidth + (x * scale + dx)] ^= 1;
     return wasOn;
+}
+
+// SUPER-CHIP scrolling. Each shifts the whole display and blanks the gap.
+// The loop direction matters: we copy from pixels we haven't overwritten yet.
+
+void Chip8::scrollDown(int n) {
+    for (int y = kHeight - 1; y >= 0; --y)            // bottom row first
+        for (int x = 0; x < kWidth; ++x)
+            display[y * kWidth + x] = (y >= n) ? display[(y - n) * kWidth + x] : 0;
+    drawFlag = true;
+}
+
+void Chip8::scrollRight(int n) {
+    for (int y = 0; y < kHeight; ++y)
+        for (int x = kWidth - 1; x >= 0; --x)         // rightmost column first
+            display[y * kWidth + x] = (x >= n) ? display[y * kWidth + (x - n)] : 0;
+    drawFlag = true;
+}
+
+void Chip8::scrollLeft(int n) {
+    for (int y = 0; y < kHeight; ++y)
+        for (int x = 0; x < kWidth; ++x)              // leftmost column first
+            display[y * kWidth + x] = (x + n < kWidth) ? display[y * kWidth + (x + n)] : 0;
+    drawFlag = true;
 }
 
 void Chip8::unknown(uint16_t op) {
