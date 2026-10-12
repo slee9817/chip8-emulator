@@ -160,17 +160,17 @@ void Chip8::step() {
 
 void Chip8::op0(uint16_t op) {
     if ((op & 0xFFF0) == 0x00C0) {   // 00CN (SUPER-CHIP): scroll down N pixels
-        scrollDown(op & 0x000F);
+        scroll(0, op & 0x000F);
         return;
     }
     if ((op & 0xFFF0) == 0x00D0) {   // 00DN (XO-CHIP): scroll up N pixels
-        scrollUp(op & 0x000F);
+        scroll(0, -(op & 0x000F));
         return;
     }
 
     switch (op) {
-    case 0x00E0:  // clear screen
-        display.fill(0);
+    case 0x00E0:  // clear screen (XO-CHIP: only the selected planes)
+        for (auto& p : display) p = static_cast<uint8_t>(p & ~planeMask);
         drawFlag = true;
         break;
 
@@ -179,11 +179,11 @@ void Chip8::op0(uint16_t op) {
         break;
 
     case 0x00FB:  // SUPER-CHIP: scroll right 4 pixels
-        scrollRight(4);
+        scroll(4, 0);
         break;
 
     case 0x00FC:  // SUPER-CHIP: scroll left 4 pixels
-        scrollLeft(4);
+        scroll(-4, 0);
         break;
 
     case 0x00FD:  // SUPER-CHIP: exit
@@ -206,7 +206,6 @@ void Chip8::op0(uint16_t op) {
         break;
     }
 }
-
 void Chip8::op8(uint16_t op) {
     uint8_t x = (op >> 8) & 0x0F;
     uint8_t y = (op >> 4) & 0x0F;
@@ -291,6 +290,22 @@ void Chip8::opF(uint16_t op) {
             unknown(op);
         }
         break;
+    case 0x01:  // FN01 (XO-CHIP): select drawing planes (N = 0-3)
+        planeMask = x & 0x03;
+        break;
+    case 0x02:  // F002 (XO-CHIP): load the 16-byte audio pattern from memory at I
+        if (x == 0) {
+            for (int i = 0; i < 16; ++i) audioPattern[i] = mem(I + i);
+            xoAudio = true;
+        }
+        else {
+            unknown(op);
+        }
+        break;
+    case 0x3A:  // FX3A (XO-CHIP): set the audio pitch to VX
+        pitch = V[x];
+        xoAudio = true;
+        break;
     case 0x1E:  // FX1E: I += VX
         I += V[x];
         break;
@@ -357,10 +372,10 @@ void Chip8::opF(uint16_t op) {
 
 // DXYN: draw an N-byte sprite from memory[I] at (VX, VY).
 // DXY0 (SUPER-CHIP): draw a 16x16 sprite, 2 bytes per row.
+// XO-CHIP: the sprite is drawn into each selected plane. If both planes are
+// selected, the data for plane 2 follows right after the data for plane 1.
 // Sprites are XORed onto the screen. VF = 1 if any lit pixel gets turned off.
 void Chip8::draw(uint8_t xPos, uint8_t yPos, uint8_t height) {
-    // In low-res mode the game sees a 64x32 screen, and each of its pixels
-    // covers a 2x2 block of our 128x64 display.
     const int scale = hires ? 1 : 2;
     const int w = kWidth / scale;
     const int h = kHeight / scale;
@@ -368,39 +383,45 @@ void Chip8::draw(uint8_t xPos, uint8_t yPos, uint8_t height) {
     const bool big = (height == 0);
     const int rows = big ? 16 : height;
     const int cols = big ? 16 : 8;
+    const int bytesPerPlane = big ? 32 : height;
 
-    int startX = xPos % w;   // starting position wraps...
+    int startX = xPos % w;
     int startY = yPos % h;
     V[0xF] = 0;
 
-    for (int row = 0; row < rows; ++row) {
-        int py = startY + row;
-        if (py >= h) break;  // ...but the sprite itself clips at the edge
+    uint32_t addr = I;   // each selected plane reads the next chunk of sprite data
+    for (int plane = 0; plane < 2; ++plane) {
+        uint8_t bit = 1 << plane;            // plane 1 -> bit 1, plane 2 -> bit 2
+        if (!(planeMask & bit)) continue;    // this plane isn't selected
 
-        // Each row as 16 bits, left-aligned: big sprites use 2 bytes,
-        // normal sprites put their 1 byte in the top half.
-        uint16_t bits = big ? (mem(I + row * 2) << 8) | mem(I + row * 2 + 1)
-            : (mem(I + row) << 8);
+        for (int row = 0; row < rows; ++row) {
+            int py = startY + row;
+            if (py >= h) break;
 
-        for (int col = 0; col < cols; ++col) {
-            int px = startX + col;
-            if (px >= w) break;
+            uint16_t bits = big ? (mem(addr + row * 2) << 8) | mem(addr + row * 2 + 1)
+                : (mem(addr + row) << 8);
 
-            if (bits & (0x8000 >> col)) {
-                if (flipPixel(px, py, scale)) V[0xF] = 1;
+            for (int col = 0; col < cols; ++col) {
+                int px = startX + col;
+                if (px >= w) break;
+
+                if (bits & (0x8000 >> col)) {
+                    if (flipPixel(px, py, scale, bit)) V[0xF] = 1;
+                }
             }
         }
+        addr += bytesPerPlane;
     }
     drawFlag = true;
 }
 
-// Flip one logical pixel. In low-res mode it covers a 2x2 block of the display.
-// Returns true if the pixel was on before (a collision).
-bool Chip8::flipPixel(int x, int y, int scale) {
-    bool wasOn = display[(y * scale) * kWidth + (x * scale)];
+// Flip one plane of one logical pixel. In low-res mode it covers a 2x2 block.
+// Returns true if that plane was on before (a collision).
+bool Chip8::flipPixel(int x, int y, int scale, uint8_t bit) {
+    bool wasOn = display[(y * scale) * kWidth + (x * scale)] & bit;
     for (int dy = 0; dy < scale; ++dy)
         for (int dx = 0; dx < scale; ++dx)
-            display[(y * scale + dy) * kWidth + (x * scale + dx)] ^= 1;
+            display[(y * scale + dy) * kWidth + (x * scale + dx)] ^= bit;
     return wasOn;
 }
 
@@ -410,36 +431,22 @@ void Chip8::skip() {
     pc += (next == 0xF000) ? 4 : 2;
 }
 
-// SUPER-CHIP scrolling. Each shifts the whole display and blanks the gap.
-// The loop direction matters: we copy from pixels we haven't overwritten yet.
-
-void Chip8::scrollUp(int n) {
-    for (int y = 0; y < kHeight; ++y)                 // top row first
-        for (int x = 0; x < kWidth; ++x)
-            display[y * kWidth + x] = (y + n < kHeight) ? display[(y + n) * kWidth + x] : 0;
+// Scroll the selected planes by (dx, dy) display pixels. Positive dx = right,
+// positive dy = down. Pixels scrolled in from off-screen are blank.
+void Chip8::scroll(int dx, int dy) {
+    auto old = display;   // copy, so we always read the un-scrolled image
+    for (int y = 0; y < kHeight; ++y) {
+        for (int x = 0; x < kWidth; ++x) {
+            int sx = x - dx, sy = y - dy;   // where this pixel comes from
+            uint8_t src = (sx >= 0 && sx < kWidth && sy >= 0 && sy < kHeight)
+                ? old[sy * kWidth + sx] : 0;
+            uint8_t& p = display[y * kWidth + x];
+            // keep the unselected planes, take the selected planes from the source
+            p = static_cast<uint8_t>((p & ~planeMask) | (src & planeMask));
+        }
+    }
     drawFlag = true;
 }
-void Chip8::scrollDown(int n) {
-    for (int y = kHeight - 1; y >= 0; --y)            // bottom row first
-        for (int x = 0; x < kWidth; ++x)
-            display[y * kWidth + x] = (y >= n) ? display[(y - n) * kWidth + x] : 0;
-    drawFlag = true;
-}
-
-void Chip8::scrollRight(int n) {
-    for (int y = 0; y < kHeight; ++y)
-        for (int x = kWidth - 1; x >= 0; --x)         // rightmost column first
-            display[y * kWidth + x] = (x >= n) ? display[y * kWidth + (x - n)] : 0;
-    drawFlag = true;
-}
-
-void Chip8::scrollLeft(int n) {
-    for (int y = 0; y < kHeight; ++y)
-        for (int x = 0; x < kWidth; ++x)              // leftmost column first
-            display[y * kWidth + x] = (x + n < kWidth) ? display[y * kWidth + (x + n)] : 0;
-    drawFlag = true;
-}
-
 void Chip8::unknown(uint16_t op) {
     std::fprintf(stderr, "Unimplemented opcode %04X at %03X\n", op, pc - 2);
 }

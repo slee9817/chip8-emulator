@@ -12,6 +12,8 @@
 #include <fstream>
 #include <sstream>
 
+#include <cmath>
+
 static constexpr int kScale = 6;              // window = 768 x 384
 static constexpr int kInstructionsPerSecond = 700;
 static constexpr int kTimerHz = 60;
@@ -74,18 +76,59 @@ static void showControls(SDL_Window* window, const std::string& romPath) {
         text.c_str(), window);
 }
 
-// Called by SDL whenever the speakers need more audio.
-// Fills the buffer with a 440 Hz square wave.
-static void audioCallback(void* userdata, Uint8* stream, int len) {
-    int* phase = static_cast<int*>(userdata);           // where we are in the wave
-    int16_t* samples = reinterpret_cast<int16_t*>(stream);
-    int count = len / 2;                                // 2 bytes per 16-bit sample
+// Everything the audio thread needs. The main loop copies the latest values in
+// while the audio device is locked, so the two threads never see half-updated data.
+struct AudioState {
+    std::array<uint8_t, 16> pattern{};
+    uint8_t pitch = 64;
+    bool xo = false;      // false = classic beep, true = play the game's pattern
+    double pos = 0.0;     // current position in the 128-bit pattern
+    int phase = 0;        // current position in the classic square wave
+};
 
-    const int period = 44100 / 440;                     // samples per wave cycle (~100)
-    for (int i = 0; i < count; ++i) {
-        samples[i] = (*phase < period / 2) ? 3000 : -3000;  // high half, then low half
-        if (++*phase >= period) *phase = 0;
+// Called by SDL whenever the speakers need more audio.
+static void audioCallback(void* userdata, Uint8* stream, int len) {
+    AudioState* a = static_cast<AudioState*>(userdata);
+    int16_t* samples = reinterpret_cast<int16_t*>(stream);
+    int count = len / 2;   // 2 bytes per 16-bit sample
+
+    if (!a->xo) {
+        // Classic CHIP-8 beep: 440 Hz square wave
+        const int period = 44100 / 440;
+        for (int i = 0; i < count; ++i) {
+            samples[i] = (a->phase < period / 2) ? 3000 : -3000;
+            if (++a->phase >= period) a->phase = 0;
+        }
+        return;
     }
+
+    // XO-CHIP: loop the game's 128-bit pattern at the game's pitch
+    double bitsPerSecond = 4000.0 * std::pow(2.0, (a->pitch - 64) / 48.0);
+    double step = bitsPerSecond / 44100.0;   // how far through the pattern per output sample
+    for (int i = 0; i < count; ++i) {
+        int bit = static_cast<int>(a->pos);
+        bool on = a->pattern[bit / 8] & (0x80 >> (bit % 8));
+        samples[i] = on ? 3000 : -3000;
+        a->pos += step;
+        if (a->pos >= 128.0) a->pos -= 128.0;   // loop back to the start
+    }
+}
+
+// XO-CHIP palette: one color per pixel value (0-3).
+static constexpr uint32_t kPalette[4] = {
+    0x101010,  // 0: background
+    0xE8E8E8,  // 1: plane 1 only (the classic CHIP-8 color)
+    0xFF7A3D,  // 2: plane 2 only
+    0x4FB0FF,  // 3: both planes
+};
+
+// Mix two colors: t = 0 gives a, t = 1 gives b.
+static uint32_t blend(uint32_t a, uint32_t b, float t) {
+    auto channel = [&](int shift) {
+        int ca = (a >> shift) & 0xFF, cb = (b >> shift) & 0xFF;
+        return static_cast<uint32_t>(ca + (cb - ca) * t) << shift;
+        };
+    return 0xFF000000 | channel(16) | channel(8) | channel(0);
 }
 
 int main(int argc, char* argv[]) {
@@ -116,14 +159,14 @@ int main(int argc, char* argv[]) {
         Chip8::kWidth, Chip8::kHeight);
 
     // --- Audio: open a device that plays our square wave ---
-    static int beepPhase = 0;
+    static AudioState audio;
     SDL_AudioSpec want{};
     want.freq = 44100;               // samples per second
     want.format = AUDIO_S16SYS;      // 16-bit signed samples
     want.channels = 1;               // mono
     want.samples = 512;              // buffer size
     want.callback = audioCallback;
-    want.userdata = &beepPhase;
+    want.userdata = &audio;
 
     SDL_AudioDeviceID audioDev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
     if (audioDev == 0)
@@ -133,6 +176,7 @@ int main(int argc, char* argv[]) {
     const double msPerTimerTick = 1000.0 / kTimerHz;
     double instructionAccum = 0, timerAccum = 0, renderAccum = 0;
     std::array<float, Chip8::kWidth* Chip8::kHeight> glow{};  // brightness per pixel, 0..1
+    std::array<uint8_t, Chip8::kWidth* Chip8::kHeight> lastColor{};
     constexpr float kFade = 0.8f;  // how much brightness a pixel keeps per frame after turning off
     Uint64 last = SDL_GetPerformanceCounter();
     bool running = true;
@@ -206,12 +250,11 @@ int main(int argc, char* argv[]) {
 
             uint32_t pixels[Chip8::kWidth * Chip8::kHeight];
             for (int i = 0; i < Chip8::kWidth * Chip8::kHeight; ++i) {
-                if (chip8.display[i]) glow[i] = 1.0f;   // lit: full brightness
-                else                  glow[i] *= kFade; // off: fade out gradually
+                uint8_t c = chip8.display[i];
+                if (c) { glow[i] = 1.0f; lastColor[i] = c; }   // lit: full brightness, remember the color
+                else { glow[i] *= kFade; }                    // off: fade out gradually
 
-                // blend from background (0x10) to foreground (0xE8)
-                uint8_t v = static_cast<uint8_t>(0x10 + glow[i] * (0xE8 - 0x10));
-                pixels[i] = 0xFF000000 | (v << 16) | (v << 8) | v;
+                pixels[i] = blend(kPalette[0], kPalette[lastColor[i]], glow[i]);
             }
 
             SDL_UpdateTexture(texture, nullptr, pixels, Chip8::kWidth * sizeof(uint32_t));
@@ -221,7 +264,15 @@ int main(int argc, char* argv[]) {
         }
 
         // --- Sound: play while the sound timer is running, pause otherwise ---
-        if (audioDev) SDL_PauseAudioDevice(audioDev, chip8.soundOn() ? 0 : 1);
+                // --- Sound: hand the latest pattern/pitch to the audio thread, then play or pause ---
+        if (audioDev) {
+            SDL_LockAudioDevice(audioDev);      // audio thread waits while we update
+            audio.pattern = chip8.audioPattern;
+            audio.pitch = chip8.pitch;
+            audio.xo = chip8.xoAudio;
+            SDL_UnlockAudioDevice(audioDev);
+            SDL_PauseAudioDevice(audioDev, chip8.soundOn() ? 0 : 1);
+        }
 
         SDL_Delay(1);
     }
