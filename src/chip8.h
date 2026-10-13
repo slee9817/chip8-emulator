@@ -25,15 +25,17 @@ public:
     std::array<uint8_t, kWidth * kHeight> display{};  // 0-3 per pixel: bit 0 = plane 1, bit 1 = plane 2.
     std::array<bool, 16> keys{};                      // true = held down
     bool drawFlag = false;                            // set when display changes
-    bool exited = false;                  // SUPER-CHIP 00FD: program has ended
+    bool exited = false;                             // SUPER-CHIP 00FD: program has ended
     // Behaviors that differ between interpreters. Can be changed at any time.
     struct Quirks {
         bool shiftCopiesVY;          // 8XY6/8XYE: copy VY into VX before shifting
         bool loadStoreIncrementsI;   // FX55/FX65: advance I past the registers
         bool jumpUsesVX;             // BNNN: jump to XNN + VX instead of NNN + V0
+        bool wrapSprites;            // DXYN: sprites wrap around screen edges instead of clipping
     };
-    static constexpr Quirks kChip8Quirks = { true,  true,  false };
-    static constexpr Quirks kSuperChipQuirks = { false, false, true };
+    static constexpr Quirks kChip8Quirks = { true,  true,  false, false };
+    static constexpr Quirks kSuperChipQuirks = { false, false, true,  false };
+    static constexpr Quirks kXoChipQuirks = { true,  true,  false, true };
 
     Quirks quirks = kChip8Quirks;    // start in classic CHIP-8 mode
     bool soundOn() const { return soundTimer > 0; }

@@ -13,9 +13,9 @@
 #include <sstream>
 
 #include <cmath>
+#include <algorithm>
 
 static constexpr int kScale = 6;              // window = 768 x 384
-static constexpr int kInstructionsPerSecond = 700;
 static constexpr int kTimerHz = 60;
 
 // CHIP-8 keypad      Keyboard
@@ -36,11 +36,25 @@ static std::string fileName(const std::string& path) {
     return (slash == std::string::npos) ? path : path.substr(slash + 1);
 }
 
-// Window title: game name, active quirk mode, and a hint for switching.
-static void updateTitle(SDL_Window* window, const std::string& romPath, bool superMode) {
+// The three modes F2 cycles through: quirks plus a sensible default speed.
+struct ModeInfo {
+    const char* name;
+    Chip8::Quirks quirks;
+    int speed;            // instructions per second
+};
+static const ModeInfo kModes[] = {
+    { "CHIP-8",     Chip8::kChip8Quirks,     700   },
+    { "SUPER-CHIP", Chip8::kSuperChipQuirks, 1800  },
+    { "XO-CHIP",    Chip8::kXoChipQuirks,    30000 },
+};
+static constexpr int kModeCount = 3;
+
+// Window title: game name, mode, speed, and key hints.
+static void updateTitle(SDL_Window* window, const std::string& romPath,
+    const char* modeName, int ips) {
     std::string title = "CHIP-8 - " + fileName(romPath)
-        + (superMode ? "   [SUPER-CHIP mode]" : "   [CHIP-8 mode]")
-        + "   F2: switch";
+        + "   [" + modeName + " mode, " + std::to_string(ips) + " instr/s]"
+        + "   F1 help | F2 mode | F3/F4 speed";
     SDL_SetWindowTitle(window, title.c_str());
 }
 
@@ -151,8 +165,9 @@ int main(int argc, char* argv[]) {
         ("CHIP-8 - " + fileName(romPath)).c_str(),
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         Chip8::kWidth * kScale, Chip8::kHeight * kScale, 0);
-    bool superChipMode = false;
-    updateTitle(window, romPath, superChipMode);
+    int mode = 0;                                       // index into kModes; starts in CHIP-8
+    int instructionsPerSecond = kModes[mode].speed;
+    updateTitle(window, romPath, kModes[mode].name, instructionsPerSecond);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_Texture* texture = SDL_CreateTexture(
         renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
@@ -172,7 +187,7 @@ int main(int argc, char* argv[]) {
     if (audioDev == 0)
         std::fprintf(stderr, "No audio (%s) - continuing without sound\n", SDL_GetError());
 
-    const double msPerInstruction = 1000.0 / kInstructionsPerSecond;
+    double msPerInstruction = 1000.0 / instructionsPerSecond;
     const double msPerTimerTick = 1000.0 / kTimerHz;
     double instructionAccum = 0, timerAccum = 0, renderAccum = 0;
     std::array<float, Chip8::kWidth* Chip8::kHeight> glow{};  // brightness per pixel, 0..1
@@ -188,17 +203,30 @@ int main(int argc, char* argv[]) {
             if (e.type == SDL_QUIT) running = false;
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) running = false;
 
-            // F2: switch between CHIP-8 and SUPER-CHIP quirk modes
-            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F2) {
-                superChipMode = !superChipMode;
-                chip8.quirks = superChipMode ? Chip8::kSuperChipQuirks : Chip8::kChip8Quirks;
-                updateTitle(window, romPath, superChipMode);
-            }
-
             // F1: show this game's notes and controls
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F1) {
                 showControls(window, romPath);
                 last = SDL_GetPerformanceCounter();   // don't "catch up" on time spent reading
+            }
+
+            // F2: cycle CHIP-8 -> SUPER-CHIP -> XO-CHIP (quirks + default speed)
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F2) {
+                mode = (mode + 1) % kModeCount;
+                chip8.quirks = kModes[mode].quirks;
+                instructionsPerSecond = kModes[mode].speed;
+                msPerInstruction = 1000.0 / instructionsPerSecond;
+                updateTitle(window, romPath, kModes[mode].name, instructionsPerSecond);
+            }
+
+            // F3 / F4: halve or double the speed
+            if (e.type == SDL_KEYDOWN &&
+                (e.key.keysym.sym == SDLK_F3 || e.key.keysym.sym == SDLK_F4)) {
+                if (e.key.keysym.sym == SDLK_F3)
+                    instructionsPerSecond = std::max(100, instructionsPerSecond / 2);
+                else
+                    instructionsPerSecond = std::min(200000, instructionsPerSecond * 2);
+                msPerInstruction = 1000.0 / instructionsPerSecond;
+                updateTitle(window, romPath, kModes[mode].name, instructionsPerSecond);
             }
 
             // CHIP-8 keypad
@@ -210,15 +238,15 @@ int main(int argc, char* argv[]) {
             // A .ch8 file was dropped onto the window
             if (e.type == SDL_DROPFILE) {
                 std::string path = e.drop.file;
-                SDL_free(e.drop.file);           // SDL allocated this string; we must free it
+                SDL_free(e.drop.file);
 
-                Chip8 fresh;                      // brand-new machine, in the current quirk mode
-                fresh.quirks = superChipMode ? Chip8::kSuperChipQuirks : Chip8::kChip8Quirks;
+                Chip8 fresh;                      // brand-new machine, in the current mode
+                fresh.quirks = kModes[mode].quirks;
                 if (fresh.loadRom(path)) {
-                    chip8 = fresh;                // replace the running game
+                    chip8 = fresh;
                     chip8.drawFlag = true;
-                    romPath = path;               // remember which game is loaded
-                    updateTitle(window, romPath, superChipMode);
+                    romPath = path;
+                    updateTitle(window, romPath, kModes[mode].name, instructionsPerSecond);
                 }
                 else {
                     std::fprintf(stderr, "Could not load ROM: %s\n", path.c_str());
@@ -234,6 +262,7 @@ int main(int argc, char* argv[]) {
         timerAccum += elapsedMs;
         renderAccum += elapsedMs;
 
+        if (instructionAccum > 50.0) instructionAccum = 50.0;   // never try to catch up more than 50 ms at once
         while (instructionAccum >= msPerInstruction) {
             chip8.step();
             instructionAccum -= msPerInstruction;

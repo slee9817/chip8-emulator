@@ -396,14 +396,14 @@ void Chip8::draw(uint8_t xPos, uint8_t yPos, uint8_t height) {
 
         for (int row = 0; row < rows; ++row) {
             int py = startY + row;
-            if (py >= h) break;
+            if (py >= h) { if (!quirks.wrapSprites) break; py %= h; }
 
             uint16_t bits = big ? (mem(addr + row * 2) << 8) | mem(addr + row * 2 + 1)
                 : (mem(addr + row) << 8);
 
             for (int col = 0; col < cols; ++col) {
                 int px = startX + col;
-                if (px >= w) break;
+                if (px >= w) { if (!quirks.wrapSprites) break; px %= w; }
 
                 if (bits & (0x8000 >> col)) {
                     if (flipPixel(px, py, scale, bit)) V[0xF] = 1;
