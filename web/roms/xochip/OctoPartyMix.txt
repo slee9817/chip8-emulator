@@ -1,0 +1,6 @@
+Octo Party Mix!
+by Cratmang
+
+It's basically Warioware. But with cute octo buddies!
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

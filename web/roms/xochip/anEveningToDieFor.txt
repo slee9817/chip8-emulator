@@ -1,0 +1,6 @@
+An Evening to Die For
+by JohnEarnest
+
+It is a dark and stormy night. A murder has been committed...
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

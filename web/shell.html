@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHIP-8 Emulator</title>
+<style>
+  :root { --bg: #0e0f12; --panel: #181a20; --line: #2c2f38; --text: #e8e8e8; --muted: #9aa0aa; --accent: #4FB0FF; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+         display: flex; flex-direction: column; align-items: center; padding: 24px 16px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; text-align: center; }
+  .sub { color: var(--muted); margin: 0 0 20px; text-align: center; }
+  a { color: var(--accent); }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; width: 100%; max-width: 768px; }
+  select, button { font: inherit; padding: 6px 12px; border-radius: 6px;
+                   border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  select { flex: 1; min-width: 0; }
+  button { cursor: pointer; border-color: var(--accent); }
+  canvas { display: block; width: 100% !important; max-width: 768px; height: auto !important;
+           aspect-ratio: 2 / 1; background: #101010; border-radius: 8px; image-rendering: pixelated; outline: none; }
+  #status { color: var(--muted); min-height: 1.5em; margin-top: 8px; }
+  .keys { margin-top: 16px; color: var(--muted); font-size: 0.9rem; text-align: center; }
+  kbd { background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+        padding: 0 5px; font-family: ui-monospace, Consolas, monospace; color: var(--text); }
+</style>
+</head>
+<body>
+  <h1>CHIP-8 / SUPER-CHIP / XO-CHIP Emulator</h1>
+  <p class="sub">Written in C++ and compiled to WebAssembly ·
+     <a href="https://github.com/slee9817/chip8-emulator">Source on GitHub</a></p>
+
+  <div class="bar">
+    <!-- Filled in automatically from the bundled ROM folders once the emulator loads -->
+    <select id="game"><option>Loading games…</option></select>
+    <button id="load">Play</button>
+  </div>
+
+  <canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+  <div id="status">Loading…</div>
+
+  <p class="keys">
+    Keypad:
+    <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>
+    <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd>
+    <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd>
+    <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd><br>
+    Pong: <kbd>1</kbd> up, <kbd>Q</kbd> down · Click the game if keys or sound don't respond.
+  </p>
+
+  <script>
+    // Each bundled folder, and the emulator mode its games need
+    // (0 = CHIP-8, 1 = SUPER-CHIP, 2 = XO-CHIP).
+    var FOLDERS = [
+      { dir: '/roms/games',  mode: 0, label: 'CHIP-8' },
+      { dir: '/roms/schip',  mode: 1, label: 'SUPER-CHIP' },
+      { dir: '/roms/xochip', mode: 2, label: 'XO-CHIP' },
+    ];
+
+    // Build the game menu from the ROM files bundled into the build.
+    function buildMenu() {
+      var select = document.getElementById('game');
+      select.innerHTML = '';
+      FOLDERS.forEach(function (folder) {
+        var files;
+        try { files = Module.FS.readdir(folder.dir); } catch (e) { return; }   // folder not bundled
+        var group = document.createElement('optgroup');
+        group.label = folder.label;
+        files.filter(function (name) { return /\.ch8$/i.test(name); })
+             .sort(function (a, b) { return a.localeCompare(b); })
+             .forEach(function (name) {
+               var option = document.createElement('option');
+               option.value = folder.dir + '/' + name + '|' + folder.mode;
+               option.textContent = name.replace(/\.ch8$/i, '');
+               group.appendChild(option);
+             });
+        if (group.children.length) select.appendChild(group);
+      });
+    }
+
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      setStatus: function (text) { document.getElementById('status').textContent = text; },
+      print: function (text) { console.log(text); },
+      printErr: function (text) { console.warn(text); },
+      onRuntimeInitialized: buildMenu,   // runs once the bundled files are ready
+    };
+
+    document.getElementById('load').addEventListener('click', function () {
+      var value = document.getElementById('game').value;
+      if (value.indexOf('|') < 0) return;               // menu not ready yet
+      var parts = value.split('|');
+      // Calls the C++ function load_rom(const char* path, int mode) in main.cpp
+      Module.ccall('load_rom', null, ['string', 'number'], [parts[0], Number(parts[1])]);
+      document.getElementById('canvas').focus();
+    });
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

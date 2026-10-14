@@ -1,0 +1,6 @@
+Octovore
+by JackieKircher
+
+a game of hungry hungry octopods
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

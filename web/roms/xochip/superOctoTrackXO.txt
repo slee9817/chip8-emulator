@@ -1,0 +1,6 @@
+Super Octo Track XO
+by TomRintjema
+
+Compose songs with the XO-Chip audio system.
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

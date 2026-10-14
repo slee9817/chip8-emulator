@@ -1,0 +1,6 @@
+Kesha Was Bird
+by Kesha
+
+A surreal telephone adventure.
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

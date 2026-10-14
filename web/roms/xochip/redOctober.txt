@@ -1,0 +1,6 @@
+Red October V
+by Kesha
+
+A futuristic RPG.
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

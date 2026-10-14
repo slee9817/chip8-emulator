@@ -1,0 +1,6 @@
+Into The GarlicScape
+by JohnEarnest
+
+Collect aliums, avoid moths, pet llamas. A template program for Octojam 7.
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

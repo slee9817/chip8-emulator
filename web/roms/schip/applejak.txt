@@ -1,0 +1,6 @@
+Applejak
+by JohnEarnest
+
+Interpreter for a subset of APL/K.
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

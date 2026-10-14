@@ -1,0 +1,6 @@
+Wonky Pong
+by TomRintjema
+
+Pong, but wonky. Made for Octojam IV.
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

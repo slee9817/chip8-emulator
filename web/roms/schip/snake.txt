@@ -1,0 +1,6 @@
+Snake
+by TimoTriisa
+
+Classic Snake game without walls.
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

@@ -1,0 +1,6 @@
+Chipcross
+by buffi
+
+16 levels of Picross implemented in CHIP8. 800 bytes of fun.
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

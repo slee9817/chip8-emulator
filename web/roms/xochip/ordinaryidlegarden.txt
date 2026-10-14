@@ -1,0 +1,6 @@
+Ordinary Idle Garden
+by Cratmang
+
+Grow a tiny garden filled with dandelions, pumpkins... lanturns... skeletons?
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

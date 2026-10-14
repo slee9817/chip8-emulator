@@ -1,0 +1,6 @@
+T8NKS
+by your name here
+
+Artillery game
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

@@ -1,0 +1,6 @@
+jub8 Song 1
+by your name here
+
+Rhythm game. WARNING: Volume
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

@@ -1,0 +1,6 @@
+Octoma
+by Cratmang
+
+A simplified clone of Ultima. Go forth and save the Octo Princess!
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

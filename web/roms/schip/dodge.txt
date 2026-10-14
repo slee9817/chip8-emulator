@@ -1,0 +1,6 @@
+Dodge
+by JohnEarnest
+
+Dodging asteroids in 56 bytes.
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

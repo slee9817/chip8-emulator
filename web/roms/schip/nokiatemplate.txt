@@ -1,0 +1,6 @@
+Nokia 3310 Template
+by JohnEarnest
+
+SCHIP template program for resembling the Nokia 3310
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

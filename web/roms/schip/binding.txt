@@ -1,0 +1,6 @@
+The Binding of COSMAC
+by buffi
+
+Simplified Isaac demake for SCHIP. 42 screens across three floors with an exciting boss battle at the end!
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

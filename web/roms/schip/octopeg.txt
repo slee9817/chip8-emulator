@@ -1,0 +1,6 @@
+Octopeg
+by Chromatophore
+
+Peggle clone for Superchip
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

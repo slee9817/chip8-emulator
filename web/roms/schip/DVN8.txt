@@ -1,0 +1,6 @@
+DVN8
+by SystemLogoff
+
+This is your great-grandma's dungeon crawler. You can see it with the manual at https://systemlogoff.com/share/DVN8/index.html
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

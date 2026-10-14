@@ -1,0 +1,6 @@
+Sw8 Copter
+by JohnEarnest
+
+An adaptation of "Swing Copters" for the Super Chip8.
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

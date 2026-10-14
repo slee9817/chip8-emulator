@@ -1,0 +1,6 @@
+Expedition.
+by JohnEarnest
+
+A short narrative about going outside.
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

@@ -1,0 +1,6 @@
+Truck Simul8or
+by buffi
+
+You're a kid, you're a truck.
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

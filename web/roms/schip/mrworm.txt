@@ -1,0 +1,6 @@
+Mr Worm
+by rmmh
+
+A snake game with more degrees of freedom, inspired by the TI-89 game.
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

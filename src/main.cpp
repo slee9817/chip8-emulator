@@ -1,19 +1,17 @@
 // Platform layer: SDL2 window, input, timing. All emulation lives in Chip8.
 #include <SDL2/SDL.h>
-
 #include <cstdio>
 #include <unordered_map>
-
 #include "chip8.h"
-
 #include<string>
 #include<array>
-
 #include <fstream>
 #include <sstream>
-
 #include <cmath>
 #include <algorithm>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 static constexpr int kScale = 6;              // window = 768 x 384
 static constexpr int kTimerHz = 60;
@@ -145,6 +143,19 @@ static uint32_t blend(uint32_t a, uint32_t b, float t) {
     return 0xFF000000 | channel(16) | channel(8) | channel(0);
 }
 
+// --- Web build: lets the web page switch games ---------------------------
+// The page's game menu calls load_rom(path, mode). We just store the request;
+// the main loop picks it up on its next pass, like it does a dropped file.
+static std::string g_pendingRom;
+static int g_pendingMode = -1;
+
+#ifdef __EMSCRIPTEN__
+extern "C" EMSCRIPTEN_KEEPALIVE void load_rom(const char* path, int mode) {
+    g_pendingRom = path;
+    g_pendingMode = mode;
+}
+#endif
+
 int main(int argc, char* argv[]) {
     // Use the ROM given on the command line, or fall back to the IBM logo test.
     std::string romPath = (argc >= 2) ? argv[1]
@@ -188,6 +199,30 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "No audio (%s) - continuing without sound\n", SDL_GetError());
 
     double msPerInstruction = 1000.0 / instructionsPerSecond;
+
+    // Switch to one of the kModes presets: quirks, default speed, and title.
+    auto setMode = [&](int newMode) {
+        mode = newMode;
+        chip8.quirks = kModes[mode].quirks;
+        instructionsPerSecond = kModes[mode].speed;
+        msPerInstruction = 1000.0 / instructionsPerSecond;
+        updateTitle(window, romPath, kModes[mode].name, instructionsPerSecond);
+        };
+
+    // Replace the running game with a fresh machine loaded from `path`.
+    auto loadGame = [&](const std::string& path) {
+        Chip8 fresh;
+        fresh.quirks = kModes[mode].quirks;
+        if (fresh.loadRom(path)) {
+            chip8 = fresh;
+            chip8.drawFlag = true;
+            romPath = path;
+            updateTitle(window, romPath, kModes[mode].name, instructionsPerSecond);
+        }
+        else {
+            std::fprintf(stderr, "Could not load ROM: %s\n", path.c_str());
+        }
+        };
     const double msPerTimerTick = 1000.0 / kTimerHz;
     double instructionAccum = 0, timerAccum = 0, renderAccum = 0;
     std::array<float, Chip8::kWidth* Chip8::kHeight> glow{};  // brightness per pixel, 0..1
@@ -209,14 +244,9 @@ int main(int argc, char* argv[]) {
                 last = SDL_GetPerformanceCounter();   // don't "catch up" on time spent reading
             }
 
-            // F2: cycle CHIP-8 -> SUPER-CHIP -> XO-CHIP (quirks + default speed)
-            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F2) {
-                mode = (mode + 1) % kModeCount;
-                chip8.quirks = kModes[mode].quirks;
-                instructionsPerSecond = kModes[mode].speed;
-                msPerInstruction = 1000.0 / instructionsPerSecond;
-                updateTitle(window, romPath, kModes[mode].name, instructionsPerSecond);
-            }
+            // F2: cycle CHIP-8 -> SUPER-CHIP -> XO-CHIP
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F2)
+                setMode((mode + 1) % kModeCount);
 
             // F3 / F4: halve or double the speed
             if (e.type == SDL_KEYDOWN &&
@@ -235,23 +265,19 @@ int main(int argc, char* argv[]) {
                 if (it != kKeyMap.end()) chip8.keys[it->second] = (e.type == SDL_KEYDOWN);
             }
 
-            // A .ch8 file was dropped onto the window
+            // A .ch8 file was dropped onto the window (desktop)
             if (e.type == SDL_DROPFILE) {
                 std::string path = e.drop.file;
                 SDL_free(e.drop.file);
-
-                Chip8 fresh;                      // brand-new machine, in the current mode
-                fresh.quirks = kModes[mode].quirks;
-                if (fresh.loadRom(path)) {
-                    chip8 = fresh;
-                    chip8.drawFlag = true;
-                    romPath = path;
-                    updateTitle(window, romPath, kModes[mode].name, instructionsPerSecond);
-                }
-                else {
-                    std::fprintf(stderr, "Could not load ROM: %s\n", path.c_str());
-                }
+                loadGame(path);
             }
+        }
+
+        // A game was picked from the web page's menu
+        if (!g_pendingRom.empty()) {
+            if (g_pendingMode >= 0 && g_pendingMode < kModeCount) setMode(g_pendingMode);
+            loadGame(g_pendingRom);
+            g_pendingRom.clear();
         }
 
         // --- Timing: run CPU and timers at fixed rates regardless of frame rate ---

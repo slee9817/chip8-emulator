@@ -1,0 +1,6 @@
+Horsey Jump
+by LarissaR
+
+Press the X button to make the horse jump over the fence.
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

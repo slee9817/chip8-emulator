@@ -1,0 +1,6 @@
+Squad
+by JohnEarnest
+
+Interpreter for a regular-sized Forth.
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.

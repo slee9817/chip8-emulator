@@ -1,0 +1,6 @@
+Flutter By
+by TomRintjema
+
+A game where you are a butterfly trying to get to flowers.
+
+XO-CHIP game - use CHIP-8 mode for now (XO-CHIP mode coming soon).

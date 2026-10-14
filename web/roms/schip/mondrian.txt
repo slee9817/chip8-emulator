@@ -1,0 +1,6 @@
+Mondri8
+by JohnEarnest
+
+Draw random compositions in the style of Piet Mondrian.
+
+SUPER-CHIP game - press F2 to switch to SUPER-CHIP mode.
