@@ -46,7 +46,8 @@
     <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd>
     <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd>
     <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd><br>
-    Pong: <kbd>1</kbd> up, <kbd>Q</kbd> down · Click the game if keys or sound don't respond.
+    Controls differ per game · <kbd>F2</kbd> mode · <kbd>F3</kbd>/<kbd>F4</kbd> speed ·
+    Click the game if keys or sound don't respond.
   </p>
 
   <script>
@@ -61,10 +62,17 @@
     // Build the game menu from the ROM files bundled into the build.
     function buildMenu() {
       var select = document.getElementById('game');
+      // Emscripten's virtual file system: Module.FS when exported, or the global FS.
+      var fs = Module.FS || (typeof FS !== 'undefined' ? FS : null);
+      if (!fs) {
+        console.warn('File system not available - add FS to EXPORTED_RUNTIME_METHODS in CMakeLists.txt');
+        select.innerHTML = '<option>Game list unavailable</option>';
+        return;
+      }
       select.innerHTML = '';
       FOLDERS.forEach(function (folder) {
         var files;
-        try { files = Module.FS.readdir(folder.dir); } catch (e) { return; }   // folder not bundled
+        try { files = fs.readdir(folder.dir); } catch (e) { return; }   // folder not bundled
         var group = document.createElement('optgroup');
         group.label = folder.label;
         files.filter(function (name) { return /\.ch8$/i.test(name); })
@@ -84,17 +92,21 @@
       setStatus: function (text) { document.getElementById('status').textContent = text; },
       print: function (text) { console.log(text); },
       printErr: function (text) { console.warn(text); },
-      onRuntimeInitialized: buildMenu,   // runs once the bundled files are ready
+      // Once the bundled files are ready: fill the menu and start its first game.
+      onRuntimeInitialized: function () { buildMenu(); loadSelected(); },
     };
 
-    document.getElementById('load').addEventListener('click', function () {
+    // Ask the emulator to load whichever game is selected in the menu.
+    function loadSelected() {
       var value = document.getElementById('game').value;
-      if (value.indexOf('|') < 0) return;               // menu not ready yet
+      if (value.indexOf('|') < 0) return;               // menu not ready / empty
       var parts = value.split('|');
       // Calls the C++ function load_rom(const char* path, int mode) in main.cpp
       Module.ccall('load_rom', null, ['string', 'number'], [parts[0], Number(parts[1])]);
       document.getElementById('canvas').focus();
-    });
+    }
+
+    document.getElementById('load').addEventListener('click', loadSelected);
   </script>
   {{{ SCRIPT }}}
 </body>

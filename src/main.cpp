@@ -164,7 +164,10 @@ int main(int argc, char* argv[]) {
     Chip8 chip8;
     if (!chip8.loadRom(romPath)) {
         std::fprintf(stderr, "Could not load ROM: %s\n", romPath.c_str());
-        return 1;
+#ifndef __EMSCRIPTEN__
+        return 1;   // desktop: nothing to run without a ROM
+#endif
+        // web: keep going with a blank screen; the page's menu loads a game
     }
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
